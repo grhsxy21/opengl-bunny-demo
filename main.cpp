@@ -1,23 +1,30 @@
-// dear imgui: standalone example application for SDL2 + OpenGL
-// If you are new to dear imgui, see examples/README.txt and documentation at the top of imgui.cpp.
-// (SDL is a cross-platform general purpose library for handling windows, inputs, OpenGL/Vulkan graphics context creation, etc.)
-
-// **DO NOT USE THIS CODE IF YOUR CODE/ENGINE IS USING MODERN OPENGL (SHADERS, VBO, VAO, etc.)**
-// **Prefer using the code in the example_sdl_opengl3/ folder**
-// See imgui_impl_sdl.cpp for details.
 
 #include <GL/glew.h>
 #include "imgui.h"
-#include "imgui_impl_sdl.h"
+#include "imgui_impl_glfw.h"
 #include "imgui_impl_opengl2.h"
+#include <stdio.h>
+#ifdef __APPLE__
+#define GL_SILENCE_DEPRECATION
+#endif
+#include <GLFW/glfw3.h>
 #include "utils.h"
 #include "materials.h"
-#include <stdio.h>
 #include <cmath>
 #include <algorithm>
-#include <SDL.h>
-#include <SDL_opengl.h>
 #include <GL/glu.h>
+
+// [Win32] Our example includes a copy of glfw3.lib pre-compiled with VS2010 to maximize ease of testing and compatibility with old VS compilers.
+// To link with VS2010-era libraries, VS2015+ requires linking with legacy_stdio_definitions.lib, which we do using this pragma.
+// Your own project should not be affected, as you are likely to link with a newer binary of GLFW that is adequate for your version of Visual Studio.
+#if defined(_MSC_VER) && (_MSC_VER >= 1900) && !defined(IMGUI_DISABLE_WIN32_FUNCTIONS)
+#pragma comment(lib, "legacy_stdio_definitions")
+#endif
+
+static void glfw_error_callback(int error, const char* description)
+{
+    fprintf(stderr, "Glfw Error %d: %s\n", error, description);
+}
 
 static void draw_coordinate();
 static void set_light_attribute();
@@ -81,25 +88,19 @@ GLuint select_buffer[SELECT_BUF_SIZE];
 // Main code
 int main(int argc, const char* argv[])
 {
-    // Setup SDL
-    // (Some versions of SDL before <2.0.10 appears to have performance/stalling issues on a minority of Windows systems,
-    // depending on whether SDL_INIT_GAMECONTROLLER is enabled or disabled.. updating to latest version of SDL is recommended!)
-    if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_TIMER | SDL_INIT_GAMECONTROLLER) != 0) {
-        fprintf(stderr, "Error: %s\n", SDL_GetError());
-        return -1;
-    }
-
     // Setup window
-    SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1);
-    SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE, 24);
-    SDL_GL_SetAttribute(SDL_GL_STENCIL_SIZE, 8);
-    SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 2);
-    SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 1);
-    SDL_WindowFlags window_flags = (SDL_WindowFlags)(SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE | SDL_WINDOW_ALLOW_HIGHDPI);
-    SDL_Window* window = SDL_CreateWindow("Stanford Bunny", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, 1200, 600, window_flags);
-    SDL_GLContext gl_context = SDL_GL_CreateContext(window);
-    SDL_GL_MakeCurrent(window, gl_context);
-    SDL_GL_SetSwapInterval(1); // Enable vsync
+    glfwSetErrorCallback(glfw_error_callback);
+    if (!glfwInit())
+        return 1;
+    glfwWindowHint(GLFW_VISIBLE, GL_FALSE);
+    GLFWwindow* window = glfwCreateWindow(1200, 600, "Stanford Bunny", NULL, NULL);
+    if (window == NULL)
+        return 1;
+    const GLFWvidmode* mode = glfwGetVideoMode(glfwGetPrimaryMonitor());
+    glfwSetWindowPos(window, (mode->width - 1200) / 2, (mode->height - 600) / 2);
+    glfwMakeContextCurrent(window);
+    glfwSwapInterval(1); // Enable vsync
+    glfwShowWindow(window);
 
     // Setup GLEW
     //glewExperimental = GL_TRUE;
@@ -161,23 +162,17 @@ int main(int argc, const char* argv[])
     //ImGui::StyleColorsClassic();
 
     // Setup Platform/Renderer bindings
-    ImGui_ImplSDL2_InitForOpenGL(window, gl_context);
+    ImGui_ImplGlfw_InitForOpenGL(window, true);
     ImGui_ImplOpenGL2_Init();
 
     // Main loop
-    bool done = false;
-    while (!done) {
+    while (!glfwWindowShouldClose(window)) {
         // Poll and handle events (inputs, window resize, etc.)
         // You can read the io.WantCaptureMouse, io.WantCaptureKeyboard flags to tell if dear imgui wants to use your inputs.
         // - When io.WantCaptureMouse is true, do not dispatch mouse input data to your main application.
         // - When io.WantCaptureKeyboard is true, do not dispatch keyboard input data to your main application.
         // Generally you may always pass all inputs to dear imgui, and hide them from your application based on those two flags.
-        SDL_Event event;
-        while (SDL_PollEvent(&event)) {
-            ImGui_ImplSDL2_ProcessEvent(&event);
-            if (event.type == SDL_QUIT)
-                done = true;
-        }
+        glfwPollEvents();
 
         // 更新视口参数
         viewport.w = std::min({(GLint)io.DisplaySize.x, (GLint)io.DisplaySize.y, (GLint)800});
@@ -285,7 +280,7 @@ int main(int argc, const char* argv[])
 
         // Start the Dear ImGui frame
         ImGui_ImplOpenGL2_NewFrame();
-        ImGui_ImplSDL2_NewFrame(window);
+        ImGui_ImplGlfw_NewFrame();
         ImGui::NewFrame();
 
         // UI 设计代码
@@ -399,6 +394,9 @@ int main(int argc, const char* argv[])
 
         // Rendering
         ImGui::Render();
+        // int display_w, display_h;
+        // glfwGetFramebufferSize(window, &display_w, &display_h);
+        // glViewport(0, 0, display_w, display_h);
         glClearColor(clear_color[0], clear_color[1], clear_color[2], clear_color[3]);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
@@ -483,17 +481,17 @@ int main(int argc, const char* argv[])
         // 渲染 imgui
         ImGui_ImplOpenGL2_RenderDrawData(ImGui::GetDrawData());
 
-        SDL_GL_SwapWindow(window);
+        glfwMakeContextCurrent(window);
+        glfwSwapBuffers(window);
     }
 
     // Cleanup
     ImGui_ImplOpenGL2_Shutdown();
-    ImGui_ImplSDL2_Shutdown();
+    ImGui_ImplGlfw_Shutdown();
     ImGui::DestroyContext();
 
-    SDL_GL_DeleteContext(gl_context);
-    SDL_DestroyWindow(window);
-    SDL_Quit();
+    glfwDestroyWindow(window);
+    glfwTerminate();
 
     return 0;
 }
@@ -534,7 +532,7 @@ static void draw_coordinate()
     };
     glBindBuffer(GL_VERTEX_ARRAY, 0);
     glVertexPointer(3, GL_FLOAT, 0, coord_lines);
-    glDrawArrays(GL_LINES, 0, sizeof(coord_lines)/sizeof(GLfloat)/3);
+    glDrawArrays(GL_LINES, 0, sizeof(coord_lines) / sizeof(GLfloat) / 3);
 }
 
 // 光源及材质设置
