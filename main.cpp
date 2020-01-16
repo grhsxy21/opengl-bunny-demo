@@ -93,6 +93,7 @@ int main(int argc, const char* argv[])
     if (!glfwInit())
         return 1;
     glfwWindowHint(GLFW_VISIBLE, GL_FALSE);
+    glfwWindowHint(GLFW_SAMPLES, 4);
     GLFWwindow* window = glfwCreateWindow(1200, 600, "Stanford Bunny", NULL, NULL);
     if (window == NULL)
         return 1;
@@ -409,6 +410,7 @@ int main(int argc, const char* argv[])
         glEnable(GL_LIGHTING);
         glEnable(GL_LIGHT0);
         glEnable(GL_LIGHT1);
+        glEnable(GL_MULTISAMPLE);
 
         // 背面剔除
         glCullFace(GL_BACK);
